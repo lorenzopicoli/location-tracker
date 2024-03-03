@@ -104,18 +104,20 @@ function renderLayer() {
     'animationStartDatePicker'
   )
   const animationStartDate = dayjs(animationStartDatePicker.value)
+  const filterRange = isAnimationOn
+    ? [
+        animationStartDate.unix(),
+        currentAnimationDate.clone().add(5, 'second').unix(),
+      ]
+    : filterCheckbox.checked
+    ? [startDate.unix(), endDate.unix()]
+    : [-Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER]
+  console.log('range', filterRange)
   const filters = {
     getFilterValue: (d) => {
       return dayjs.unix(d.message_creation_time).unix()
     },
-    filterRange: isAnimationOn
-      ? [
-          animationStartDate.unix(),
-          currentAnimationDate.clone().add(5, 'second').unix(),
-        ]
-      : filterCheckbox.checked
-      ? [startDate, endDate]
-      : [-Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER],
+    filterRange,
     extensions: [
       new DataFilterExtension({
         filterSize: 1,
