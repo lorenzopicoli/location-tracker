@@ -1,4 +1,4 @@
-const { DeckGL, HeatmapLayer, IconLayer } = deck
+const { DeckGL, HeatmapLayer, IconLayer, DataFilterExtension } = deck
 
 function isMobile() {
   let check = false
@@ -27,7 +27,7 @@ const deckgl = new DeckGL({
     maxZoom: 50,
   },
   container: document.getElementById('container'),
-  controller: true,
+  controller: true, // Define extensions
 })
 
 const COLOR_RANGE = [
@@ -38,6 +38,11 @@ const COLOR_RANGE = [
   [225, 65, 59],
   [240, 93, 99],
 ]
+
+let events = []
+let isAnimationOn = false
+let currentAnimationDate
+let lastAnimationEventIndex = 0
 
 function formatUnixTimestamp(unixTimestamp, timezone) {
   // Convert Unix timestamp to milliseconds
@@ -87,18 +92,49 @@ Creation date: ${formatUnixTimestamp(
   )}`
 }
 
-function renderLayer(data) {
+function renderLayer() {
+  const startDate = dayjs(document.getElementById('startDatePicker').value)
+  const endDate = dayjs(document.getElementById('endDatePicker').value)
+  const filterCheckbox = document.getElementById('filterCheckbox')
+  if (filterCheckbox.checked && (!startDate.isValid() || !endDate.isValid())) {
+    return
+  }
+
+  const animationStartDatePicker = document.getElementById(
+    'animationStartDatePicker'
+  )
+  const animationStartDate = dayjs(animationStartDatePicker.value)
+  const filters = {
+    getFilterValue: (d) => {
+      return dayjs.unix(d.message_creation_time).unix()
+    },
+    filterRange: isAnimationOn
+      ? [
+          animationStartDate.unix(),
+          currentAnimationDate.clone().add(5, 'second').unix(),
+        ]
+      : filterCheckbox.checked
+      ? [startDate, endDate]
+      : [-Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER],
+    extensions: [
+      new DataFilterExtension({
+        filterSize: 1,
+        // Important for precise unix timestamp filtering
+        fp64: true,
+      }),
+    ],
+  }
   const iconLayer = new IconLayer({
     id: 'icons',
-    data: data.map((l) => [l.longitude, l.latitude]),
+    data: events,
     pickable: true,
     sizeScale: isMobile() ? 50 : 15,
-    getPosition: (d) => d,
+    getPosition: (l) => [l.longitude, l.latitude],
     onClick: (object, _event) => {
       if (object.index === -1) {
         return
       }
-      const event = data[object.index]
+      const event = events[object.index]
       alert(getTextForEvent(event))
       return true
     },
@@ -107,6 +143,7 @@ function renderLayer(data) {
       height: 50,
       url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Map_marker.svg/390px-Map_marker.svg.png',
     }),
+    ...filters,
   })
 
   deckgl.setProps({
@@ -115,7 +152,7 @@ function renderLayer(data) {
       if (object.index === -1) {
         return
       }
-      const event = data[object.index]
+      const event = events[object.index]
       return getTextForEvent(event)
     },
   })
@@ -126,8 +163,69 @@ fetch('/events')
     return response.json()
   })
   .then((points) => {
-    renderLayer(points)
+    events = points
+    renderLayer()
   })
   .catch((err) => {
     console.warn('Something went wrong.', err)
   })
+
+function addMinutes(date, minutes) {
+  return new Date(date.getTime() + minutes * 60000)
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const startDatePicker = document.getElementById('startDatePicker')
+  const animationStartDate = document.getElementById('animationStartDatePicker')
+  const startAnimationButton = document.getElementById('startAnimationButton')
+  const stopAnimationButton = document.getElementById('stopAnimationButton')
+  const animationSpeed = document.getElementById('animationSpeedPicker')
+  const currentAnimationDateEl = document.getElementById('currentAnimationDate')
+  const animationSupportText = document.getElementById('animationSupportText')
+
+  filterCheckbox.addEventListener('change', renderLayer)
+  startDatePicker.addEventListener('change', renderLayer)
+  animationStartDate.addEventListener('change', renderLayer)
+
+  let interval
+
+  startAnimationButton.addEventListener('click', () => {
+    isAnimationOn = true
+    if (interval) {
+      clearInterval(interval)
+    }
+    lastAnimationEventIndex = events.findIndex((e) =>
+      dayjs
+        .unix(e.message_creation_time)
+        .isAfter(dayjs(animationStartDate.value))
+    )
+    // Yeah yeah I know
+    animationSupportText.innerHTML = 'State: (ON)'
+    interval = setInterval(() => {
+      if (lastAnimationEventIndex + 1 >= events.length) {
+        isAnimationOn = false
+        renderLayer()
+        clearInterval(interval)
+        return
+      }
+      currentAnimationDate = dayjs.unix(
+        events[lastAnimationEventIndex].message_creation_time
+      )
+      // Yeah yeah I know
+      currentAnimationDateEl.innerText = currentAnimationDate.format(
+        'DD/MM/YYYY HH:mm:ss'
+      )
+      renderLayer()
+      lastAnimationEventIndex++
+    }, animationSpeed.value * 1000)
+  })
+  stopAnimationButton.addEventListener('click', () => {
+    // Yeah yeah I know
+    animationSupportText.innerHTML = 'State: (OFF)'
+    if (interval) {
+      clearInterval(interval)
+    }
+    isAnimationOn = false
+    renderLayer()
+  })
+})
