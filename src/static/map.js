@@ -20,9 +20,9 @@ const deckgl = new DeckGL({
   mapStyle:
     'https://tiles.basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
   initialViewState: {
-    longitude: -40.2909793,
-    latitude: -20.2970474,
-    zoom: 6,
+    latitude: 45.5429024,
+    longitude: -73.6550577,
+    zoom: 11,
     minZoom: 1,
     maxZoom: 50,
   },
