@@ -69,7 +69,10 @@ export class LocationServer {
       message_creation_time: typedBody.created_at,
       monitoring_mode: typedBody.m,
     }
-    await saveToDatabase(this.db, event)
+    console.log(`${new Date()} Saving event`, JSON.stringify(event))
+    await saveToDatabase(this.db, event).catch((e) => {
+      console.error('Error saving to database', e)
+    })
   }
 
   private async getAllData() {
